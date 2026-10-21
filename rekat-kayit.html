@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Rekat sensör kaydı</title>
+<style>
+:root{--bg:#e9ece4;--ink:#1f3a2e;--muted:#5d6b62;--line:#c4cbbf;--accent:#c8892b;--card:#f6f7f2;--bad:#a23b2a;color-scheme:light;
+ box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#15201a;--ink:#dfe8dc;--muted:#9aa89d;--line:#2c3b32;--accent:#e0a24a;--card:#1b2921;--bad:#e07a66;color-scheme:dark}}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+main{max-width:34rem;margin:0 auto;padding:1.25rem 1rem 3rem}
+h1{font:600 1.6rem/1.2 "Iowan Old Style",Georgia,serif;margin:.5rem 0 .25rem}
+h2{font:600 1.05rem/1.3 "Iowan Old Style",Georgia,serif;margin:0 0 .6rem}
+p{margin:.25rem 0 .75rem;color:var(--muted)}
+section{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:1rem;margin:1rem 0}
+label{display:block;font-size:.9rem;margin:.6rem 0 .2rem}
+input,select{width:100%;font:inherit;padding:.6rem;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink)}
+button{font:inherit;font-weight:600;padding:.75rem 1rem;border-radius:8px;border:1px solid var(--ink);background:var(--ink);color:var(--bg);width:100%;margin-top:.6rem;cursor:pointer}
+button.ghost{background:transparent;color:var(--ink)}
+button:disabled{opacity:.45;cursor:not-allowed}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.row{display:flex;gap:.6rem}.row>*{flex:1}
+canvas{width:100%;height:150px;display:block;background:var(--bg);border:1px solid var(--line);border-radius:6px}
+.status{font-size:.9rem;color:var(--muted);min-height:1.4em}
+.status.err{color:var(--bad)}
+.legend{font-size:.8rem;color:var(--muted);display:flex;gap:1rem;margin-top:.3rem}
+.legend i{display:inline-block;width:.7rem;height:.7rem;border-radius:2px;margin-right:.3rem;vertical-align:-1px}
+#lock{position:fixed;inset:0;background:#000;color:#3a3a3a;display:none;align-items:center;justify-content:center;text-align:center;z-index:99;touch-action:none;user-select:none;-webkit-user-select:none;padding:2rem}
+#lock.on{display:flex}
+#lock span{font-size:1rem;line-height:1.6}
+.big{font:600 3rem/1 "Iowan Old Style",Georgia,serif;color:#555}
+</style>
+</head>
+<body>
+<main>
+  <h1>Rekat sensör kaydı</h1>
+  <p>Telefonu ekran açık şekilde pantolon cebine koyup namaz sırasındaki hareket verisini kaydeder. Amaç, sayma mantığını yazmadan önce gerçek veriyi görmek.</p>
+
+  <section>
+    <h2>1. Sensörü dene</h2>
+    <p>Telefonu elinde eğip oynat; grafik hareket etmeli.</p>
+    <button id="perm">Sensör iznini ver</button>
+    <div class="status" id="permStatus"></div>
+    <canvas id="chart" width="600" height="300" aria-label="Canlı ivme grafiği"></canvas>
+    <div class="legend"><span><i style="background:#c8892b"></i>x</span><span><i style="background:#3f7d5a"></i>y</span><span><i style="background:#4a6fa5"></i>z</span><span id="hz"></span></div>
+  </section>
+
+  <section>
+    <h2>2. Kaydı hazırla</h2>
+    <label for="rekat">Kılacağın rekat sayısı (gerçek değer)</label>
+    <select id="rekat"><option>2</option><option>3</option><option selected>4</option><option>5</option><option>6</option><option>8</option><option>10</option><option>11</option><option>13</option></select>
+    <label for="kind">Namaz türü / not</label>
+    <input id="kind" placeholder="örn. öğle sünneti, ayakta, halı" maxlength="60">
+    <label for="delay">Başlamadan önce bekleme (saniye)</label>
+    <input id="delay" type="number" min="3" max="30" value="10" inputmode="numeric">
+    <label for="maxmin">En fazla kayıt süresi (dakika)</label>
+    <input id="maxmin" type="number" min="1" max="20" value="6" inputmode="numeric">
+    <button id="start" disabled>Kaydı başlat</button>
+    <p style="margin-top:.75rem">Başlatınca ekran kararır ve dokunmalar kapanır. Geri sayım bitene kadar telefonu cebine koy. Titreşim kayıt başladığını, çift titreşim bittiğini gösterir.</p>
+  </section>
+
+  <section>
+    <h2>3. Kaydı bitir</h2>
+    <p>Namaz bitince siyah ekrana <b>2 saniye basılı tut</b>. Süre dolarsa kayıt kendiliğinden de biter.</p>
+    <div class="status" id="result"></div>
+    <div class="row">
+      <button id="save" class="ghost" disabled>CSV indir</button>
+      <button id="share" class="ghost" disabled>Paylaş</button>
+    </div>
+  </section>
+</main>
+
+<div id="lock" role="status"><span id="lockText"></span></div>
+
+<script>
+(function(){
+  var $=function(id){return document.getElementById(id)};
+  var permBtn=$('perm'),permStatus=$('permStatus'),startBtn=$('start'),saveBtn=$('save'),shareBtn=$('share'),result=$('result');
+  var lock=$('lock'),lockText=$('lockText'),canvas=$('chart'),ctx=canvas.getContext('2d'),hzEl=$('hz');
+
+  var state='idle'; // idle | countdown | recording
+  var rows=[]; var lastOri={a:'',b:'',g:''};
+  var live=[]; var LIVE_N=300;
+  var wake=null; var t0=0; var evCount=0, evT=performance.now();
+  var maxTimer=null, countTimer=null, pressTimer=null;
+  var csvText='', csvName='';
+
+  function setStatus(el,msg,err){el.textContent=msg;el.className='status'+(err?' err':'')}
+
+  /* ---- izin ---- */
+  function enableSensors(){
+    window.addEventListener('devicemotion',onMotion);
+    window.addEventListener('deviceorientation',onOri);
+    startBtn.disabled=false;
+    setStatus(permStatus,'Sensör açık. Veri geliyorsa grafik hareket eder.');
+    setTimeout(function(){ if(!evCount) setStatus(permStatus,'Veri gelmiyor. Tarayıcı bu sayfada hareket sensörüne izin vermiyor olabilir; sayfayı HTTPS üzerinden aç.',true)},2000);
+  }
+  permBtn.addEventListener('click',function(){
+    if(typeof DeviceMotionEvent==='undefined'){setStatus(permStatus,'Bu tarayıcı hareket sensörünü desteklemiyor.',true);return}
+    if(typeof DeviceMotionEvent.requestPermission==='function'){
+      DeviceMotionEvent.requestPermission().then(function(r){
+        if(r==='granted'){
+          if(typeof DeviceOrientationEvent!=='undefined'&&DeviceOrientationEvent.requestPermission){DeviceOrientationEvent.requestPermission().catch(function(){})}
+          enableSensors();
+        } else setStatus(permStatus,'İzin verilmedi. Safari ayarlarından sensör erişimini aç.',true);
+      }).catch(function(e){setStatus(permStatus,'İzin hatası: '+e.message,true)});
+    } else enableSensors();
+  });
+
+  /* ---- sensör olayları ---- */
+  function onOri(e){lastOri.a=e.alpha;lastOri.b=e.beta;lastOri.g=e.gamma}
+  function f(v){return v==null?'':(Math.round(v*1000)/1000)}
+  function onMotion(e){
+    var g=e.accelerationIncludingGravity||{}, r=e.rotationRate||{}, l=e.acceleration||{};
+    var now=performance.now();
+    evCount++; if(now-evT>1000){hzEl.textContent=Math.round(evCount*1000/(now-evT))+' Hz';evCount=0;evT=now}
+    live.push([g.x||0,g.y||0,g.z||0]); if(live.length>LIVE_N)live.shift();
+    if(state==='recording'){
+      rows.push([Math.round(now-t0),f(g.x),f(g.y),f(g.z),f(l.x),f(l.y),f(l.z),f(r.alpha),f(r.beta),f(r.gamma),f(lastOri.a),f(lastOri.b),f(lastOri.g)].join(','));
+    }
+  }
+
+  /* ---- canlı grafik ---- */
+  var cols=['#c8892b','#3f7d5a','#4a6fa5'];
+  function draw(){
+    var w=canvas.width,h=canvas.height;ctx.clearRect(0,0,w,h);
+    ctx.strokeStyle='rgba(128,128,128,.25)';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(0,h/2);ctx.lineTo(w,h/2);ctx.stroke();
+    var range=20; // m/s² görünür aralık ±20
+    for(var k=0;k<3;k++){
+      ctx.strokeStyle=cols[k];ctx.lineWidth=2;ctx.beginPath();
+      for(var i=0;i<live.length;i++){
+        var x=i/(LIVE_N-1)*w, y=h/2-(live[i][k]/range)*(h/2);
+        i?ctx.lineTo(x,y):ctx.moveTo(x,y);
+      }
+      ctx.stroke();
+    }
+    requestAnimationFrame(draw);
+  }
+  draw();
+
+  /* ---- ekran kilidi ---- */
+  function acquireWake(){
+    if('wakeLock' in navigator){navigator.wakeLock.request('screen').then(function(w){wake=w}).catch(function(){})}
+  }
+  document.addEventListener('visibilitychange',function(){
+    if(document.visibilityState==='visible'&&state!=='idle')acquireWake();
+  });
+
+  function buzz(p){try{navigator.vibrate&&navigator.vibrate(p)}catch(e){}}
+
+  /* ---- kayıt akışı ---- */
+  startBtn.addEventListener('click',function(){
+    var delay=Math.max(3,Math.min(30,parseInt($('delay').value,10)||10));
+    rows=[];saveBtn.disabled=true;shareBtn.disabled=true;setStatus(result,'');
+    state='countdown';acquireWake();
+    lock.classList.add('on');
+    var left=delay;
+    function tick(){
+      lockText.innerHTML='<div class="big">'+left+'</div>Telefonu cebine koy';
+      if(left<=0){beginRecording();return}
+      left--;countTimer=setTimeout(tick,1000);
+    }
+    tick();
+  });
+
+  function beginRecording(){
+    state='recording';t0=performance.now();
+    lockText.textContent='Kayıt sürüyor. Bitirmek için 2 saniye basılı tut.';
+    buzz(400);
+    var mins=Math.max(1,Math.min(20,parseInt($('maxmin').value,10)||6));
+    maxTimer=setTimeout(stopRecording,mins*60000);
+  }
+
+  function stopRecording(){
+    if(state!=='recording')return;
+    clearTimeout(maxTimer);state='idle';
+    lock.classList.remove('on');
+    buzz([200,120,200]);
+    if(wake){wake.release().catch(function(){});wake=null}
+    var secs=rows.length?Math.round(parseInt(rows[rows.length-1].split(',')[0],10)/1000):0;
+    var rekat=$('rekat').value,kind=$('kind').value.replace(/[\r\n,]/g,' ').trim();
+    var stamp=new Date().toISOString().replace(/[:T]/g,'-').slice(0,19);
+    var head=['# rekat='+rekat,'# not='+kind,'# sure_sn='+secs,'# ornek='+rows.length,'# tarih='+new Date().toISOString(),
+      't_ms,ax,ay,az,lin_x,lin_y,lin_z,rot_alpha,rot_beta,rot_gamma,ori_alpha,ori_beta,ori_gamma'];
+    csvText=head.join('\n')+'\n'+rows.join('\n');
+    csvName='rekat-'+rekat+'-'+stamp+'.csv';
+    if(rows.length<20){setStatus(result,'Neredeyse hiç veri gelmedi. Sensör izni ve tarayıcıyı kontrol et.',true);return}
+    setStatus(result,secs+' saniye, '+rows.length+' örnek kaydedildi ('+rekat+' rekat). Dosyayı indirip bana gönder.');
+    saveBtn.disabled=false;shareBtn.disabled=!(navigator.canShare&&navigator.canShare({files:[new File([''],'a.csv',{type:'text/csv'})]}));
+  }
+
+  /* basılı tutarak bitir; kayıt sırasında diğer dokunmalar yok sayılır */
+  function pressStart(e){e.preventDefault();if(state!=='recording')return;pressTimer=setTimeout(stopRecording,2000)}
+  function pressEnd(e){e.preventDefault();clearTimeout(pressTimer)}
+  lock.addEventListener('touchstart',pressStart,{passive:false});
+  lock.addEventListener('touchend',pressEnd,{passive:false});
+  lock.addEventListener('touchcancel',pressEnd,{passive:false});
+  lock.addEventListener('mousedown',pressStart);lock.addEventListener('mouseup',pressEnd);
+  lock.addEventListener('contextmenu',function(e){e.preventDefault()});
+
+  /* ---- dışa aktarma ---- */
+  saveBtn.addEventListener('click',function(){
+    var blob=new Blob([csvText],{type:'text/csv'});var a=document.createElement('a');
+    a.href=URL.createObjectURL(blob);a.download=csvName;document.body.appendChild(a);a.click();a.remove();
+    setTimeout(function(){URL.revokeObjectURL(a.href)},2000);
+  });
+  shareBtn.addEventListener('click',function(){
+    var file=new File([csvText],csvName,{type:'text/csv'});
+    navigator.share({files:[file],title:csvName}).catch(function(){});
+  });
+})();
+</script>
+</body>
+</html>
