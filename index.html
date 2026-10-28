@@ -94,10 +94,44 @@ details{margin-top:.8rem}summary{cursor:pointer;font-size:.9rem;color:var(--mute
 function createCounter(opts){
   opts=opts||{};
   var CAL_FROM=1000,CAL_TO=4000,MIN_STAND=opts.minStand||6000,DEB=opts.deb||600,WIN=30;
-  var ENTER=opts.enter||0.87,EXIT=opts.exit||0.82,TAIL=opts.tail||12000;
+  var ENTER=opts.enter||0.87,EXIT=opts.exit||0.82,TAIL=opts.tail===undefined?0:opts.tail;
   var cal=[0,0,0],calN=0,g0=null,buf=[],sum=[0,0,0];
-  var isStand=false,standStart=0,nonStand=null,count=0,deps=[],lastT=0;
+  var isStand=false,standStart=0,nonStand=null,lastT=0;
+  var segs=[],curState=null,curStart=0,rawStand=false;
+  var pend=[],confirmed=[],rejected=0;
   function norm(v){var m=Math.sqrt(v[0]*v[0]+v[1]*v[1]+v[2]*v[2])||1;return [v[0]/m,v[1]/m,v[2]/m]}
+  function clean(now,from){
+    var all=segs.slice(-60);all.push({s:curState,a:curStart,b:now});from=from===undefined?0:from;
+    var out=[];
+    for(var i=0;i<all.length;i++){
+      var q=all[i];if(q.b<=from)continue;
+      var seg={s:q.s,a:Math.max(q.a,from),b:q.b};
+      var last=out[out.length-1];
+      if(last&&(seg.b-seg.a<400||last.s===seg.s)){last.b=seg.b}else out.push(seg);
+    }
+    return out;
+  }
+  function check(c,now){
+    var L=clean(now,c.t),open=L.length-1;
+    for(var i=0;i<L.length;i++){
+      if(!L[i].s)continue;
+      var d=L[i].b-L[i].a;
+      if(L[i].a-c.t>5000||d>7500)return false;
+      if(i===open)return null;
+      if(d<2000)continue;
+      var g=L[i+1];
+      if(!g)return null;
+      var gd=g.b-g.a;
+      if(i+1===open)return gd>4500?false:null;
+      if(gd<1000||gd>4500)return false;
+      var b=L[i+2];
+      if(!b)return null;
+      var bd=b.b-b.a;
+      if(i+2===open)return bd>=2000?true:null;
+      return bd>=2000;
+    }
+    return null;
+  }
   return {
     feed:function(t,x,y,z){
       lastT=t;
@@ -112,20 +146,28 @@ function createCounter(opts){
       }
       var s=norm([sum[0],sum[1],sum[2]]);
       var c=s[0]*g0[0]+s[1]*g0[1]+s[2]*g0[2];
-      var st=c>(isStand?EXIT:ENTER);
+      var st=c>(rawStand?EXIT:ENTER);rawStand=st;
+      if(curState===null){curState=st;curStart=t}
+      else if(st!==curState){segs.push({s:curState,a:curStart,b:t});if(segs.length>200)segs.shift();curState=st;curStart=t}
       if(st){nonStand=null;if(!isStand){isStand=true;standStart=Math.max(t,CAL_TO)}}
       else if(isStand){
         if(nonStand===null)nonStand=t;
         else if(t-nonStand>=DEB){
-          if(nonStand-standStart>=MIN_STAND){count++;deps.push(nonStand)}
+          if(nonStand-standStart>=MIN_STAND)pend.push({t:nonStand,dl:nonStand+16000});
           isStand=false;nonStand=null;
         }
       }
+      for(var i=pend.length-1;i>=0;i--){
+        var r=check(pend[i],t);
+        if(r===true){confirmed.push(pend[i].t);pend.splice(i,1)}
+        else if(r===false||t>pend[i].dl){if(r===false||true){rejected++;pend.splice(i,1)}}
+      }
     },
-    count:function(){return count},
+    count:function(){return confirmed.length},
+    rejected:function(){return rejected},
     finish:function(){
-      var c=count;
-      if(deps.length&&lastT-deps[deps.length-1]<TAIL)c--;
+      var c=confirmed.length;
+      if(TAIL&&confirmed.length&&lastT-confirmed[confirmed.length-1]<TAIL)c--;
       return Math.max(0,c);
     },
     calibrated:function(){return !!g0}
