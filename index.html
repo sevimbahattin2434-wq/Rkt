@@ -32,6 +32,8 @@ button:focus-visible,input:focus-visible,summary:focus-visible{outline:3px solid
 .verdict{text-align:center;font-size:1.15rem;color:var(--ink);margin:.2rem 0 .8rem}
 .note{font-size:.85rem;color:var(--muted)}
 details{margin-top:.8rem}summary{cursor:pointer;font-size:.9rem;color:var(--muted)}
+#pause{position:fixed;inset:0;z-index:98;background:var(--bg);overflow:auto;padding:calc(1rem + env(safe-area-inset-top,0px)) 1rem calc(1rem + env(safe-area-inset-bottom,0px))}
+#pause .in{max-width:34rem;margin:0 auto}
 #lock{position:fixed;inset:0;background:#000;color:#3a3a3a;display:none;align-items:center;justify-content:center;text-align:center;z-index:99;touch-action:none;user-select:none;-webkit-user-select:none;padding:2rem}
 #lock.on{display:flex}
 #lock span{font-size:1rem;line-height:1.6}
@@ -53,7 +55,7 @@ details{margin-top:.8rem}summary{cursor:pointer;font-size:.9rem;color:var(--mute
       </div>
       <button id="start">Başlat</button>
       <div class="status" id="homeStatus"></div>
-      <p class="note" style="margin-top:.6rem">Başlatınca ekran kararır ve dokunmalar kapanır. Geri sayım bitene kadar telefonu cebe koyun. Namaz bitince oturuyken telefonu çıkarıp siyah ekrana 2 saniye basılı tutun.</p>
+      <p class="note" style="margin-top:.6rem">Başlatınca ekran kararır ve dokunmalar kapanır. Geri sayım bitene kadar telefonu cebe koyun. Sayıya bakmak ya da bitirmek için (selamdan sonra) telefonu çıkarıp siyah ekrana 2 saniye basılı tutun.</p>
       <details>
         <summary>Ayarlar</summary>
         <label for="delay">Başlamadan önce bekleme (saniye)</label>
@@ -86,14 +88,26 @@ details{margin-top:.8rem}summary{cursor:pointer;font-size:.9rem;color:var(--mute
       <button id="again">Yeni namaz</button>
     </section>
   </div>
+  <p class="note" style="text-align:center;margin-top:1.5rem">Sürüm v4 · ara kontrollü</p>
 </main>
+<div id="pause" class="hidden">
+  <div class="in"><section>
+    <h2>Ara kontrol</h2>
+    <div class="big" id="pCount">0</div>
+    <div class="verdict" id="pVerdict"></div>
+    <p class="note hidden" id="pPending">Bir rekat yarım görünüyor, o rekat henüz sayıya girmedi.</p>
+    <p class="note">Devam edecekseniz ayağa kalkıp telefonu başlangıçtaki gibi, aynı yönde cebinize koyun. Doğru sayım için bu önemli.</p>
+    <button id="pGo">Devam et</button>
+    <button id="pEnd" class="ghost">Bitir</button>
+  </section></div>
+</div>
 <div id="lock" role="status"><span id="lockText"></span></div>
 
 <script>
 /*COUNTER_START*/
 function createCounter(opts){
   opts=opts||{};
-  var CAL_FROM=1000,CAL_TO=4000,MIN_STAND=opts.minStand||6000,DEB=opts.deb||600,WIN=30;
+  var calFrom=1000,calTo=4000,MIN_STAND=opts.minStand||6000,DEB=opts.deb||600,WIN=30;
   var ENTER=opts.enter||0.87,EXIT=opts.exit||0.82,TAIL=opts.tail===undefined?0:opts.tail;
   var cal=[0,0,0],calN=0,g0=null,buf=[],sum=[0,0,0];
   var isStand=false,standStart=0,nonStand=null,lastT=0;
@@ -137,8 +151,8 @@ function createCounter(opts){
       lastT=t;
       buf.push([x,y,z]);sum[0]+=x;sum[1]+=y;sum[2]+=z;
       if(buf.length>WIN){var o=buf.shift();sum[0]-=o[0];sum[1]-=o[1];sum[2]-=o[2]}
-      if(t>=CAL_FROM&&t<CAL_TO){cal[0]+=x;cal[1]+=y;cal[2]+=z;calN++;return}
-      if(t<CAL_FROM)return;
+      if(t>=calFrom&&t<calTo){cal[0]+=x;cal[1]+=y;cal[2]+=z;calN++;return}
+      if(t<calFrom)return;
       if(!g0){
         var m=calN?[cal[0]/calN,cal[1]/calN,cal[2]/calN]:[0,-9.8,0];
         var mag=Math.sqrt(m[0]*m[0]+m[1]*m[1]+m[2]*m[2]);
@@ -149,7 +163,7 @@ function createCounter(opts){
       var st=c>(rawStand?EXIT:ENTER);rawStand=st;
       if(curState===null){curState=st;curStart=t}
       else if(st!==curState){segs.push({s:curState,a:curStart,b:t});if(segs.length>200)segs.shift();curState=st;curStart=t}
-      if(st){nonStand=null;if(!isStand){isStand=true;standStart=Math.max(t,CAL_TO)}}
+      if(st){nonStand=null;if(!isStand){isStand=true;standStart=Math.max(t,calTo)}}
       else if(isStand){
         if(nonStand===null)nonStand=t;
         else if(t-nonStand>=DEB){
@@ -164,6 +178,12 @@ function createCounter(opts){
       }
     },
     count:function(){return confirmed.length},
+    pending:function(){return pend.length>0},
+    resume:function(mode,t,from,to){
+      if(mode==='none')return;
+      buf=[];sum=[0,0,0];segs=[];curState=null;isStand=false;nonStand=null;rawStand=false;pend=[];
+      if(mode==='recal'){g0=null;cal=[0,0,0];calN=0;calFrom=t+(from||1000);calTo=t+(to||4000)}
+    },
     rejected:function(){return rejected},
     finish:function(){
       var c=confirmed.length;
@@ -179,6 +199,7 @@ function createCounter(opts){
   var niyet=4,tahmin=0,gercek=0,corrected=false;
   var state='idle',rows=[],lastOri={a:'',b:'',g:''},counter=null,t0=0,wake=null,sensorOn=false,gotData=0;
   var maxTimer=null,countTimer=null,pressTimer=null,csvText='',csvName='',actx=null;
+  var pausedTotal=0,pauseStart=0,pauses=[],resumeBlock=false,resumeMode='',maxMs=0;
   var lock=$('lock'),lockText=$('lockText');
 
   function stepper(v,d,lo,hi){return Math.max(lo,Math.min(hi,v+d))}
@@ -216,7 +237,7 @@ function createCounter(opts){
     var g=e.accelerationIncludingGravity;if(!g||g.x==null)return;
     var l=e.acceleration||{},r=e.rotationRate||{};gotData++;
     if(state==='recording'){
-      var t=Math.round(performance.now()-t0);
+      var t=Math.round(performance.now()-t0-pausedTotal);
       counter.feed(t,g.x,g.y,g.z);
       rows.push([t,f(g.x),f(g.y),f(g.z),f(l.x),f(l.y),f(l.z),f(r.alpha),f(r.beta),f(r.gamma),f(lastOri.a),f(lastOri.b),f(lastOri.g)].join(','));
     }
@@ -250,7 +271,7 @@ function createCounter(opts){
 
   function countdown(){
     var delay=Math.max(3,Math.min(30,parseInt($('delay').value,10)||10));
-    rows=[];counter=null;gotData=0;corrected=false;
+    rows=[];counter=null;gotData=0;corrected=false;pausedTotal=0;pauses=[];resumeBlock=false;
     state='countdown';acquireWake();lock.classList.add('on');
     var left=delay;
     (function tick(){
@@ -262,14 +283,14 @@ function createCounter(opts){
   }
   function begin(){
     state='recording';counter=createCounter();t0=performance.now();
-    lockText.textContent='Namaz modu. Bitirmek için 2 saniye basılı tutun.';
+    lockText.textContent='Namaz modu. Sayıya bakmak ya da bitirmek için 2 saniye basılı tutun.';
     buzz(400);beep(1);
     var mins=Math.max(1,Math.min(30,parseInt($('maxmin').value,10)||15));
-    maxTimer=setTimeout(finish,mins*60000);
+    maxMs=mins*60000;maxTimer=setTimeout(finish,maxMs);
   }
   function finish(){
-    if(state!=='recording')return;
-    clearTimeout(maxTimer);state='idle';lock.classList.remove('on');
+    if(state!=='recording'&&state!=='paused')return;
+    clearTimeout(maxTimer);clearTimeout(countTimer);resumeBlock=false;state='idle';lock.classList.remove('on');$('pause').classList.add('hidden');
     buzz([200,120,200]);beep(2);
     if(wake){wake.release().catch(function(){});wake=null}
     tahmin=counter.finish();
@@ -284,16 +305,53 @@ function createCounter(opts){
   function buildCsv(){
     var kind=$('kind').value.replace(/[\r\n,]/g,' ').trim();
     var stamp=new Date().toISOString().replace(/[:T]/g,'-').slice(0,19);
-    var head=['# rekat='+(corrected?gercek:niyet),'# niyet='+niyet,'# tahmin='+tahmin,
+    var head=['# surum=v4','# rekat='+(corrected?gercek:niyet),'# niyet='+niyet,'# tahmin='+tahmin,
       corrected?'# gercek='+gercek+' (kullanici duzeltti)':'# gercek=duzeltilmedi','# not='+kind,
-      '# sure_sn='+(rows.length?Math.round(parseInt(rows[rows.length-1].split(',')[0],10)/1000):0),'# ornek='+rows.length,'# tarih='+new Date().toISOString(),
+      '# duraklamalar='+(pauses.join(' ')||'yok'),'# sure_sn='+(rows.length?Math.round(parseInt(rows[rows.length-1].split(',')[0],10)/1000):0),'# ornek='+rows.length,'# tarih='+new Date().toISOString(),
       't_ms,ax,ay,az,lin_x,lin_y,lin_z,rot_alpha,rot_beta,rot_gamma,ori_alpha,ori_beta,ori_gamma'];
     csvText=head.join('\n')+'\n'+rows.join('\n');
     csvName='rekat-'+(corrected?gercek:niyet)+'-'+stamp+'.csv';
   }
 
-  /* basılı tutarak bitir */
-  function ps(e){e.preventDefault();if(state!=='recording')return;pressTimer=setTimeout(finish,2000)}
+
+  /* ---- ara kontrol: duraklat ve devam et ---- */
+  function pauseRecording(){
+    if(state!=='recording'||resumeBlock)return;
+    clearTimeout(maxTimer);state='paused';pauseStart=performance.now();
+    lock.classList.remove('on');buzz(150);
+    var n=counter.count(),k=niyet-n,v=$('pVerdict');
+    $('pCount').textContent=n;
+    if(k>0)v.textContent=n+' rekat tamamlandı. Niyetinize '+k+' rekat kaldı.';
+    else if(k===0)v.textContent=n+' rekat tamamlandı. Niyetiniz kadar kılınmış görünüyor.';
+    else v.textContent=n+' rekat tamamlandı. Niyetinizden '+(-k)+' rekat fazla görünüyor.';
+    $('pPending').classList.toggle('hidden',!counter.pending());
+    $('pause').classList.remove('hidden');
+  }
+  function resumeRecording(mode){
+    var now=performance.now(),tvNow=Math.round(pauseStart-t0-pausedTotal);
+    pausedTotal+=now-pauseStart;
+    pauses.push(Math.round(tvNow/1000)+'s');
+    $('pause').classList.add('hidden');
+    counter.resume('recal',tvNow,6000,9000);
+    resumeMode=mode;resumeBlock=true;state='recording';lock.classList.add('on');
+    var left=10;
+    (function tick(){
+      lockText.innerHTML='<div class="cd">'+left+'</div>Ayağa kalkın, telefonu başlangıçtaki gibi aynı yönde cebinize koyun ve kıpırdamadan bekleyin';
+      if(left<=0){
+                resumeBlock=false;lockText.textContent='Namaz modu. Bitirmek için 2 saniye basılı tutun.';
+        buzz(300);beep(1);
+        var used=Math.round(performance.now()-t0-pausedTotal);
+        maxTimer=setTimeout(finish,Math.max(60000,maxMs-used));
+        return;
+      }
+      left--;countTimer=setTimeout(tick,1000);
+    })();
+  }
+  $('pGo').onclick=function(){resumeRecording('stand')};
+  $('pEnd').onclick=function(){finish()};
+
+  /* basılı tutarak ara kontrol */
+  function ps(e){e.preventDefault();if(state!=='recording'||resumeBlock)return;pressTimer=setTimeout(pauseRecording,2000)}
   function pe(e){e.preventDefault();clearTimeout(pressTimer)}
   lock.addEventListener('touchstart',ps,{passive:false});
   lock.addEventListener('touchend',pe,{passive:false});
