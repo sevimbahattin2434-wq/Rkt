@@ -1,0 +1,15 @@
+{
+  "name": "Rekat takip",
+  "short_name": "Rekat",
+  "description": "Namazda kılınan rekat sayısını hareket sensöründen sayar.",
+  "lang": "tr",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#e9ece4",
+  "theme_color": "#1f3a2e",
+  "icons": [
+    {"src": "rekat-icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable"},
+    {"src": "rekat-icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable"}
+  ]
+}
