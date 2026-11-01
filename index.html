@@ -94,7 +94,6 @@ details{margin-top:.8rem}summary{cursor:pointer;font-size:.9rem;color:var(--mute
       <button id="again">Yeni namaz</button>
     </section>
   </div>
-  <p class="note" style="text-align:center;margin-top:1.5rem">Sürüm v5 · ara kontrollü</p>
 </main>
 <div id="pause" class="hidden">
   <div class="in"><section>
@@ -311,7 +310,7 @@ function createCounter(opts){
   function buildCsv(){
     var kind=$('kind').value.replace(/[\r\n,]/g,' ').trim();
     var stamp=new Date().toISOString().replace(/[:T]/g,'-').slice(0,19);
-    var head=['# surum=v5','# rekat='+(corrected?gercek:niyet),'# niyet='+niyet,'# tahmin='+tahmin,
+    var head=['# surum=v6','# rekat='+(corrected?gercek:niyet),'# niyet='+niyet,'# tahmin='+tahmin,
       corrected?'# gercek='+gercek+' (kullanici duzeltti)':'# gercek=duzeltilmedi','# not='+kind,
       '# duraklamalar='+(pauses.join(' ')||'yok'),'# sure_sn='+(rows.length?Math.round(parseInt(rows[rows.length-1].split(',')[0],10)/1000):0),'# ornek='+rows.length,'# tarih='+new Date().toISOString(),
       't_ms,ax,ay,az,lin_x,lin_y,lin_z,rot_alpha,rot_beta,rot_gamma,ori_alpha,ori_beta,ori_gamma'];

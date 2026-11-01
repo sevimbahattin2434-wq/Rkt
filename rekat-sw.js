@@ -1,4 +1,4 @@
-var CACHE='rekat-v5';
+var CACHE='rekat-v6';
 var FILES=['./','rekat-manifest.json','rekat-icon-192.png','rekat-icon-512.png'];
 self.addEventListener('install',function(e){
   self.skipWaiting();
