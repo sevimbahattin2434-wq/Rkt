@@ -46,6 +46,10 @@ details{margin-top:.8rem}summary{cursor:pointer;font-size:.9rem;color:var(--mute
 #lock.on{display:flex}
 #lock span{font-size:1rem;line-height:1.6}
 .cd{font:600 3rem/1 "Iowan Old Style",Georgia,serif;color:#555}
+:root{--go:#0e7c6b;--gotext:#ffffff}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--go:#3cc7a8;--gotext:#0b2a22}}
+button.go{background:var(--go);color:var(--gotext);border-color:var(--go);padding:1.35rem 1rem;font-size:1.15rem;margin-top:.8rem}
+button.go:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
 </style>
 </head>
 <body>
@@ -64,7 +68,7 @@ details{margin-top:.8rem}summary{cursor:pointer;font-size:.9rem;color:var(--mute
         <button data-n="5" aria-label="5 rekat ile başla">5</button>
         <button data-n="13" aria-label="13 rekat ile başla">13</button>
       </div>
-      <button id="noNiyet" class="ghost">Rekat Girmeden Hemen Başla</button>
+      <button id="noNiyet" class="go">Rekat Girmeden Hemen Başla</button>
       <label style="margin-top:1rem">Başka bir sayı için</label>
       <div class="stepper">
         <button id="niyetMinus" class="ghost" aria-label="Azalt">−</button>
