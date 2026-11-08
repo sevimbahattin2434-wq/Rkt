@@ -38,6 +38,8 @@ button:focus-visible,input:focus-visible,summary:focus-visible{outline:3px solid
 .verdict{text-align:center;font-size:1.15rem;color:var(--ink);margin:.2rem 0 .8rem}
 .note{font-size:.85rem;color:var(--muted)}
 details{margin-top:.8rem}summary{cursor:pointer;font-size:.9rem;color:var(--muted)}
+.quick{display:grid;grid-template-columns:repeat(5,1fr);gap:.5rem;margin:.4rem 0}
+.quick button{margin:0;padding:.9rem 0;font-size:1.3rem}
 #pause{position:fixed;inset:0;z-index:98;background:var(--bg);overflow:auto;padding:calc(1rem + env(safe-area-inset-top,0px)) 1rem calc(1rem + env(safe-area-inset-bottom,0px))}
 #pause .in{max-width:34rem;margin:0 auto}
 #lock{position:fixed;inset:0;background:#000;color:#3a3a3a;display:none;align-items:center;justify-content:center;text-align:center;z-index:99;touch-action:none;user-select:none;-webkit-user-select:none;padding:2rem}
@@ -54,6 +56,16 @@ details{margin-top:.8rem}summary{cursor:pointer;font-size:.9rem;color:var(--mute
     <p>Telefon ekran açık şekilde pantolon cebinde. Namaz sırasındaki hareketten kaç rekat kıldığınızı sayar, selamdan sonra niyetinize göre kaç rekat kaldığını gösterir.</p>
     <section>
       <h2>Kaç rekat niyet ediyorsunuz?</h2>
+      <p class="note" style="margin-top:0">Sayıya dokununca hemen başlar.</p>
+      <div class="quick" id="quick">
+        <button data-n="4" aria-label="4 rekat ile başla">4</button>
+        <button data-n="5" aria-label="5 rekat ile başla">5</button>
+        <button data-n="8" aria-label="8 rekat ile başla">8</button>
+        <button data-n="10" aria-label="10 rekat ile başla">10</button>
+        <button data-n="13" aria-label="13 rekat ile başla">13</button>
+      </div>
+      <button id="noNiyet" class="ghost">Rekat Girmeden Hemen Başla</button>
+      <label style="margin-top:1rem">Başka bir sayı için</label>
       <div class="stepper">
         <button id="niyetMinus" class="ghost" aria-label="Azalt">−</button>
         <output id="niyetVal" aria-live="polite">4</output>
@@ -201,22 +213,23 @@ function createCounter(opts){
 /*COUNTER_END*/
 (function(){
   var $=function(id){return document.getElementById(id)};
-  var niyet=4,tahmin=0,gercek=0,corrected=false;
+  var niyet=4,sn=4,tahmin=0,gercek=0,corrected=false;
   var state='idle',rows=[],lastOri={a:'',b:'',g:''},counter=null,t0=0,wake=null,sensorOn=false,gotData=0;
   var maxTimer=null,countTimer=null,pressTimer=null,csvText='',csvName='',actx=null;
   var pausedTotal=0,pauseStart=0,pauses=[],resumeBlock=false,resumeMode='',maxMs=0;
   var lock=$('lock'),lockText=$('lockText');
 
   function stepper(v,d,lo,hi){return Math.max(lo,Math.min(hi,v+d))}
-  function setNiyet(v){niyet=v;$('niyetVal').textContent=v}
-  $('niyetMinus').onclick=function(){setNiyet(stepper(niyet,-1,1,20))};
-  $('niyetPlus').onclick=function(){setNiyet(stepper(niyet,1,1,20))};
+  function setNiyet(v){sn=v;$('niyetVal').textContent=v}
+  $('niyetMinus').onclick=function(){setNiyet(stepper(sn,-1,1,20))};
+  $('niyetPlus').onclick=function(){setNiyet(stepper(sn,1,1,20))};
   function setG(v,fromUser){gercek=v;if(fromUser)corrected=true;$('gVal').textContent=v;verdict()}
   $('gMinus').onclick=function(){setG(stepper(gercek,-1,0,30),true)};
   $('gPlus').onclick=function(){setG(stepper(gercek,1,0,30),true)};
 
   function verdict(){
     var k=niyet-gercek,el=$('verdict');
+    if(niyet==null){el.textContent=gercek+' rekat kılınmış görünüyor.';return}
     if(k>0)el.textContent=niyet+' rekat niyet ettiniz. '+k+' rekat kaldı.';
     else if(k===0)el.textContent=niyet+' rekat niyet ettiniz. Eksik görünmüyor.';
     else el.textContent=niyet+' rekat niyet ettiniz. '+(-k)+' rekat fazla görünüyor.';
@@ -268,11 +281,15 @@ function createCounter(opts){
   document.addEventListener('visibilitychange',function(){if(document.visibilityState==='visible'&&state!=='idle')acquireWake()});
 
   /* ---- akış ---- */
-  $('start').onclick=function(){
+  function startFlow(n){
+    niyet=n;
     var st=$('homeStatus');st.textContent='';st.className='status';
     try{var AC=window.AudioContext||window.webkitAudioContext;if(AC){actx=actx||new AC();if(actx.state==='suspended')actx.resume()}}catch(e){}
     askPermission().then(function(){enableSensors();countdown()}).catch(function(e){st.textContent=e.message;st.className='status err'});
-  };
+}
+  $('start').onclick=function(){startFlow(sn)};
+  $('noNiyet').onclick=function(){startFlow(null)};
+  Array.prototype.forEach.call(document.querySelectorAll('#quick button'),function(b){b.onclick=function(){startFlow(parseInt(b.getAttribute('data-n'),10))}});
 
   function countdown(){
     var delay=Math.max(3,Math.min(30,parseInt($('delay').value,10)||10));
@@ -310,12 +327,12 @@ function createCounter(opts){
   function buildCsv(){
     var kind=$('kind').value.replace(/[\r\n,]/g,' ').trim();
     var stamp=new Date().toISOString().replace(/[:T]/g,'-').slice(0,19);
-    var head=['# surum=v6','# rekat='+(corrected?gercek:niyet),'# niyet='+niyet,'# tahmin='+tahmin,
+    var head=['# surum=v7','# rekat='+(corrected?gercek:(niyet==null?tahmin:niyet)),'# niyet='+(niyet==null?'girilmedi':niyet),'# tahmin='+tahmin,
       corrected?'# gercek='+gercek+' (kullanici duzeltti)':'# gercek=duzeltilmedi','# not='+kind,
       '# duraklamalar='+(pauses.join(' ')||'yok'),'# sure_sn='+(rows.length?Math.round(parseInt(rows[rows.length-1].split(',')[0],10)/1000):0),'# ornek='+rows.length,'# tarih='+new Date().toISOString(),
       't_ms,ax,ay,az,lin_x,lin_y,lin_z,rot_alpha,rot_beta,rot_gamma,ori_alpha,ori_beta,ori_gamma'];
     csvText=head.join('\n')+'\n'+rows.join('\n');
-    csvName='rekat-'+(corrected?gercek:niyet)+'-'+stamp+'.csv';
+    csvName='rekat-'+(corrected?gercek:(niyet==null?tahmin:niyet))+'-'+stamp+'.csv';
   }
 
 
@@ -326,7 +343,8 @@ function createCounter(opts){
     lock.classList.remove('on');buzz(150);
     var n=counter.count(),k=niyet-n,v=$('pVerdict');
     $('pCount').textContent=n;
-    if(k>0)v.textContent=n+' rekat tamamlandı. Niyetinize '+k+' rekat kaldı.';
+    if(niyet==null)v.textContent=n+' rekat tamamlandı.';
+    else if(k>0)v.textContent=n+' rekat tamamlandı. Niyetinize '+k+' rekat kaldı.';
     else if(k===0)v.textContent=n+' rekat tamamlandı. Niyetiniz kadar kılınmış görünüyor.';
     else v.textContent=n+' rekat tamamlandı. Niyetinizden '+(-k)+' rekat fazla görünüyor.';
     $('pPending').classList.toggle('hidden',!counter.pending());
