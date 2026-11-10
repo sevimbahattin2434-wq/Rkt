@@ -129,7 +129,7 @@ button.go:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
 function createCounter(opts){
   opts=opts||{};
   var calFrom=1000,calTo=4000,MIN_STAND=opts.minStand||6000,DEB=opts.deb||600,WIN=30;
-  var ENTER=opts.enter||0.87,EXIT=opts.exit||0.82,TAIL=opts.tail===undefined?0:opts.tail;
+  var ENTER=opts.enter||0.82,EXIT=opts.exit||0.74,TAIL=opts.tail===undefined?0:opts.tail;
   var cal=[0,0,0],calN=0,g0=null,buf=[],sum=[0,0,0];
   var isStand=false,standStart=0,nonStand=null,lastT=0;
   var segs=[],curState=null,curStart=0,rawStand=false;
@@ -331,7 +331,7 @@ function createCounter(opts){
   function buildCsv(){
     var kind=$('kind').value.replace(/[\r\n,]/g,' ').trim();
     var stamp=new Date().toISOString().replace(/[:T]/g,'-').slice(0,19);
-    var head=['# surum=v7','# rekat='+(corrected?gercek:(niyet==null?tahmin:niyet)),'# niyet='+(niyet==null?'girilmedi':niyet),'# tahmin='+tahmin,
+    var head=['# surum=v8','# rekat='+(corrected?gercek:(niyet==null?tahmin:niyet)),'# niyet='+(niyet==null?'girilmedi':niyet),'# tahmin='+tahmin,
       corrected?'# gercek='+gercek+' (kullanici duzeltti)':'# gercek=duzeltilmedi','# not='+kind,
       '# duraklamalar='+(pauses.join(' ')||'yok'),'# sure_sn='+(rows.length?Math.round(parseInt(rows[rows.length-1].split(',')[0],10)/1000):0),'# ornek='+rows.length,'# tarih='+new Date().toISOString(),
       't_ms,ax,ay,az,lin_x,lin_y,lin_z,rot_alpha,rot_beta,rot_gamma,ori_alpha,ori_beta,ori_gamma'];
